@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# 本地解析调试产物
+docs/inspect.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

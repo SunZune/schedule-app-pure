@@ -110,12 +110,40 @@ function cellNum(cell: ExcelJS.Cell): number | null {
   if (typeof v === 'object' && v !== null && 'result' in v) {
     const r = (v as ExcelJS.CellFormulaValue).result
     if (r == null || r === '') return null
+    if (typeof r === 'string') return parseBalanceText(r)
     const n = Number(r)
     return Number.isNaN(n) ? null : n
   }
   if (typeof v === 'number') return Number.isNaN(v) ? null : v
-  const n = Number(String(v).replace(/,/g, '').trim())
-  return Number.isNaN(n) ? null : n
+  return parseBalanceText(String(v))
+}
+
+/** 解析班表中的余/负工时：余22、余4、负4、纯数字等（见 docs/2026年班表.xlsx） */
+export function parseBalanceText(raw: string): number | null {
+  const s = raw.replace(/\s/g, '').replace(/,/g, '')
+  if (!s) return null
+
+  if (s.startsWith('负')) {
+    const m = s.match(/^负([+-]?\d+(?:\.\d+)?)/)
+    if (m) return -Math.abs(Number(m[1]))
+  }
+  if (s.startsWith('余')) {
+    const m = s.match(/^余([+-]?\d+(?:\.\d+)?)/)
+    if (m) return Number(m[1])
+  }
+  if (/^[+-]?\d+(?:\.\d+)?$/.test(s)) return Number(s)
+
+  const trailing = s.match(/([+-]?\d+(?:\.\d+)?)\s*小时?$/)
+  if (trailing) return Number(trailing[1])
+
+  return null
+}
+
+function readSummaryCell(cell: ExcelJS.Cell, field: keyof SummaryValues): number | null {
+  if (field === 'month_balance' || field === 'total_balance') {
+    return parseBalanceText(cellStr(cell))
+  }
+  return cellNum(cell)
 }
 
 function getBgArgb(cell: ExcelJS.Cell): string | null {
@@ -250,7 +278,7 @@ function readSummaryValues(
     total_balance: null,
   }
   for (const [key, col] of Object.entries(summaryCols) as [keyof SummaryValues, number][]) {
-    const n = cellNum(sheet.getRow(dataRow).getCell(col))
+    const n = readSummaryCell(sheet.getRow(dataRow).getCell(col), key)
     if (n !== null) values[key] = n
   }
   return values
