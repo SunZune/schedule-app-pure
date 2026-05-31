@@ -203,6 +203,17 @@
 .balance-tag.positive { background: rgba(86,207,178,0.15);  color: var(--accent2); }
 .balance-tag.negative { background: rgba(242,100,100,0.15); color: var(--red); }
 .balance-tag.zero     { background: rgba(144,151,184,0.15); color: var(--text2); }
+.balance-tag.total-balance {
+  border: 1px solid rgba(245, 160, 50, 0.35);
+  font-weight: 600;
+}
+
+.summary-item.highlight-total {
+  border: 1px solid rgba(245, 160, 50, 0.25);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: rgba(245, 160, 50, 0.06);
+}
 
 .sheet-total {
   font-family: 'JetBrains Mono', monospace;

@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs'
 import type { AllResult, DailyRecord, SheetResult } from '../types/schedule'
+import { sortSheetsByMonth } from './sheetMonth'
 
 const SHIFT_TEXT_MAP: Record<string, string> = {
   值: '值班',
@@ -26,15 +27,43 @@ const SHIFT_FILL: Record<string, ExcelJS.Fill> = {
   年假: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC000' } },
 }
 
-const SUMMARY_KEYWORDS: Record<string, keyof SummaryValues> = {
-  应出勤: 'should_work',
-  实际出勤: 'actual_work',
-  本月余: 'month_balance',
-  累计余: 'total_balance',
-  应勤: 'should_work',
-  实勤: 'actual_work',
-  月余: 'month_balance',
-  累余: 'total_balance',
+/** 长关键词优先，避免「月余」误匹配「本月余」等 */
+const SUMMARY_KEYWORD_ENTRIES: [string, keyof SummaryValues][] = [
+  ['实际出勤', 'actual_work'],
+  ['应出勤', 'should_work'],
+  ['累计结余', 'total_balance'],
+  ['累计余', 'total_balance'],
+  ['本月余', 'month_balance'],
+  ['累余', 'total_balance'],
+  ['实勤', 'actual_work'],
+  ['应勤', 'should_work'],
+  ['月余', 'month_balance'],
+]
+
+function matchSummaryField(label: string): keyof SummaryValues | null {
+  const t = label.replace(/\s/g, '')
+  for (const [kw, key] of SUMMARY_KEYWORD_ENTRIES) {
+    if (t.includes(kw)) return key
+  }
+  return null
+}
+
+function lastUsedColumn(sheet: ExcelJS.Worksheet, aroundRow?: number): number {
+  const dim = sheet.dimensions
+  if (dim?.right && dim.right > 1) return dim.right
+  let max = sheet.columnCount || 0
+  const rows = aroundRow
+    ? [sheet.getRow(aroundRow)]
+    : []
+  for (let ri = 1; ri <= Math.min(sheet.rowCount || 0, 20); ri++) {
+    rows.push(sheet.getRow(ri))
+  }
+  for (const row of rows) {
+    row.eachCell({ includeEmpty: false }, (_, col) => {
+      max = Math.max(max, col)
+    })
+  }
+  return Math.max(max, 30)
 }
 
 const WEEKDAY_MAP: Record<string, number> = {
@@ -73,6 +102,20 @@ function cellStr(cell: ExcelJS.Cell): string {
     return r == null ? '' : String(r).trim()
   }
   return String(v).trim()
+}
+
+function cellNum(cell: ExcelJS.Cell): number | null {
+  const v = cell.value
+  if (v == null || v === '') return null
+  if (typeof v === 'object' && v !== null && 'result' in v) {
+    const r = (v as ExcelJS.CellFormulaValue).result
+    if (r == null || r === '') return null
+    const n = Number(r)
+    return Number.isNaN(n) ? null : n
+  }
+  if (typeof v === 'number') return Number.isNaN(v) ? null : v
+  const n = Number(String(v).replace(/,/g, '').trim())
+  return Number.isNaN(n) ? null : n
 }
 
 function getBgArgb(cell: ExcelJS.Cell): string | null {
@@ -179,22 +222,20 @@ function findDateAndWeekdayRows(sheet: ExcelJS.Worksheet, nameRow: number) {
 }
 
 function findSummaryCols(sheet: ExcelJS.Worksheet, headerRow: number): Partial<Record<keyof SummaryValues, number>> {
-  const maxR = Math.min(headerRow + 3, sheet.rowCount)
+  const merged: Partial<Record<keyof SummaryValues, number>> = {}
+  const maxR = Math.min(headerRow + 8, sheet.rowCount || headerRow + 8)
+  const maxC = lastUsedColumn(sheet, headerRow)
+
   for (let ri = 1; ri <= maxR; ri++) {
-    const found: Partial<Record<keyof SummaryValues, number>> = {}
     const row = sheet.getRow(ri)
-    for (let ci = 1; ci <= sheet.columnCount; ci++) {
+    for (let ci = 1; ci <= maxC; ci++) {
       const val = cellStr(row.getCell(ci))
-      for (const [kw, key] of Object.entries(SUMMARY_KEYWORDS)) {
-        if (val.includes(kw)) {
-          found[key] = ci
-          break
-        }
-      }
+      if (!val) continue
+      const key = matchSummaryField(val)
+      if (key) merged[key] = ci
     }
-    if (Object.keys(found).length >= 2) return found
   }
-  return {}
+  return merged
 }
 
 function readSummaryValues(
@@ -209,11 +250,8 @@ function readSummaryValues(
     total_balance: null,
   }
   for (const [key, col] of Object.entries(summaryCols) as [keyof SummaryValues, number][]) {
-    const cell = sheet.getRow(dataRow).getCell(col)
-    if (cell.value != null) {
-      const n = Number(cell.value)
-      values[key] = Number.isNaN(n) ? null : n
-    }
+    const n = cellNum(sheet.getRow(dataRow).getCell(col))
+    if (n !== null) values[key] = n
   }
   return values
 }
@@ -233,7 +271,7 @@ function calcSheet(
   const summaryColsList = Object.values(summaryCols).filter((c): c is number => c != null)
   const summaryMinCol = summaryColsList.length ? Math.min(...summaryColsList) : sheet.columnCount + 1
   const minDataCol = nameCol + 1
-  const maxDataCol = summaryColsList.length ? summaryMinCol - 1 : sheet.columnCount
+  const maxDataCol = summaryColsList.length ? summaryMinCol - 1 : lastUsedColumn(sheet, rowIdx)
 
   let textHits = 0
   let colorHits = 0
@@ -340,7 +378,7 @@ export async function calcAllLocal(
       grandActual += r.actual_work
     }
   }
-  return { name, sheets, grand_actual: grandActual }
+  return { name, sheets: sortSheetsByMonth(sheets), grand_actual: grandActual }
 }
 
 function applyColors(sheet: ExcelJS.Worksheet): void {

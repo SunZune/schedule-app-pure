@@ -4,7 +4,17 @@ import {
   ResponsiveContainer, ReferenceLine
 } from 'recharts'
 import { AllResult, SheetResult } from '../api/schedule'
+import { pickLatestTotalBalance } from '../lib/sheetMonth'
 import './ResultDashboard.css'
+
+function hasSheetSummary(sheet: SheetResult): boolean {
+  return (
+    sheet.has_summary ||
+    sheet.should_work !== null ||
+    sheet.month_balance !== null ||
+    sheet.total_balance !== null
+  )
+}
 
 interface Props {
   result: AllResult
@@ -67,7 +77,8 @@ function DailyCell({ d }: { d: any }) {
 
 function SheetDetail({ sheet }: { sheet: SheetResult }) {
   const [open, setOpen] = useState(false)
-  const hasBalance = sheet.should_work !== null
+  const showSummary = hasSheetSummary(sheet)
+  const hasShouldWork = sheet.should_work !== null
   const specialRest = (sheet.weekend_rest ?? 0) + (sheet.holiday_rest ?? 0)
 
   return (
@@ -88,46 +99,63 @@ function SheetDetail({ sheet }: { sheet: SheetResult }) {
             <span className="badge badge-holiday">假日×{sheet.holiday_rest}</span>}
           {(sheet.annual_leave ?? 0) > 0 &&
             <span className="badge badge-annual">年假×{sheet.annual_leave}</span>}
-          {hasBalance && (
+          {showSummary && (
             <>
               <span className="divider">|</span>
               <span className="sheet-hours-row">
-                <span className="lbl">应</span><span className="val">{sheet.should_work}h</span>
+                {hasShouldWork && (
+                  <>
+                    <span className="lbl">应</span><span className="val">{sheet.should_work}h</span>
+                  </>
+                )}
                 <span className="lbl">实</span><span className="val accent2">{sheet.actual_work}h</span>
-                <span className={`balance-tag ${balanceClass(sheet.month_balance)}`}>
-                  本月余 {fmt(sheet.month_balance)}
-                </span>
+                {sheet.month_balance !== null && (
+                  <span className={`balance-tag ${balanceClass(sheet.month_balance)}`}>
+                    本月余 {fmt(sheet.month_balance)}
+                  </span>
+                )}
+                {sheet.total_balance !== null && (
+                  <span className={`balance-tag total-balance ${balanceClass(sheet.total_balance)}`}>
+                    累计余 {fmt(sheet.total_balance)}
+                  </span>
+                )}
               </span>
             </>
           )}
-          {!hasBalance && <span className="sheet-total">{sheet.actual_work}h</span>}
+          {!showSummary && <span className="sheet-total">{sheet.actual_work}h</span>}
         </div>
       </div>
 
       {open && (
         <div className="sheet-body">
-          {hasBalance && (
+          {showSummary && (
             <div className="summary-row">
-              <div className="summary-item">
-                <span className="summary-label">应出勤</span>
-                <span className="summary-value">{sheet.should_work}h</span>
-              </div>
+              {hasShouldWork && (
+                <div className="summary-item">
+                  <span className="summary-label">应出勤</span>
+                  <span className="summary-value">{sheet.should_work}h</span>
+                </div>
+              )}
               <div className="summary-item">
                 <span className="summary-label">实际出勤</span>
                 <span className="summary-value accent2">{sheet.actual_work}h</span>
               </div>
-              <div className="summary-item">
-                <span className="summary-label">本月余</span>
-                <span className={`summary-value ${balanceClass(sheet.month_balance)}`}>
-                  {fmt(sheet.month_balance)}
-                </span>
-              </div>
-              <div className="summary-item">
-                <span className="summary-label">累计余</span>
-                <span className={`summary-value ${balanceClass(sheet.total_balance)}`}>
-                  {fmt(sheet.total_balance)}
-                </span>
-              </div>
+              {sheet.month_balance !== null && (
+                <div className="summary-item">
+                  <span className="summary-label">本月余</span>
+                  <span className={`summary-value ${balanceClass(sheet.month_balance)}`}>
+                    {fmt(sheet.month_balance)}
+                  </span>
+                </div>
+              )}
+              {sheet.total_balance !== null && (
+                <div className="summary-item highlight-total">
+                  <span className="summary-label">累计余</span>
+                  <span className={`summary-value ${balanceClass(sheet.total_balance)}`}>
+                    {fmt(sheet.total_balance)}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -165,10 +193,7 @@ export default function ResultDashboard({ result, downloadUrl }: Props) {
   const totalWeekend    = result.sheets.reduce((s, r) => s + (r.weekend_rest ?? 0), 0)
   const totalHoliday    = result.sheets.reduce((s, r) => s + (r.holiday_rest ?? 0), 0)
   const totalAnnual     = result.sheets.reduce((s, r) => s + (r.annual_leave ?? 0), 0)
-  const hasSummary      = result.sheets.some(r => r.has_summary)
-  const lastBalance     = hasSummary
-    ? result.sheets.filter(r => r.total_balance !== null).slice(-1)[0]?.total_balance
-    : null
+  const latestTotal = pickLatestTotalBalance(result.sheets)
 
   const chartData = result.sheets.map((r) => ({
     name: r.sheet,
@@ -198,11 +223,13 @@ export default function ResultDashboard({ result, downloadUrl }: Props) {
           <StatCard label="节假日休息" value={totalHoliday} color="var(--yellow)" />}
         {totalAnnual > 0 &&
           <StatCard label="年假" value={totalAnnual} sub={`${totalAnnual * 8}h`} color="#f5a032" />}
-        {lastBalance !== null && lastBalance !== undefined && (
+        {latestTotal !== null && (
           <StatCard
-            label="累计余工时" value={fmt(lastBalance)} sub="最新月份"
-            color={lastBalance >= 0 ? 'var(--accent2)' : 'var(--red)'}
-            className={balanceClass(lastBalance)}
+            label="累计余工时"
+            value={fmt(latestTotal.value)}
+            sub={`截至 ${latestTotal.sheetName}`}
+            color={latestTotal.value >= 0 ? 'var(--accent2)' : 'var(--red)'}
+            className={balanceClass(latestTotal.value)}
           />
         )}
       </div>
