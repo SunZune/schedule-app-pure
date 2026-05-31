@@ -2,7 +2,7 @@
 
 在浏览器内解析 `.xlsx` 排班表，统计工时并生成涂色 Excel。**无需后端**，文件不会上传到服务器。
 
-与带 Render 后端的完整版项目相互独立，可单独部署到 GitCode Pages / Vercel / 任意静态托管。
+与带 Render 后端的完整版项目相互独立，可单独部署到 GitHub Pages / Vercel / 任意静态托管。
 
 ## 功能
 
@@ -29,34 +29,19 @@ npm run build
 
 产物在 `dist/` 目录。
 
-## GitCode 仓库
+## GitHub 仓库
 
-https://gitcode.com/Wishings/schedule-app-pure
-
-## 推送到 GitCode
-
-GitCode 已不支持账号密码推送，需使用**私人令牌（PAT）**：
-
-1. 登录 [GitCode](https://gitcode.com) → 个人设置 → 私人令牌 → 新建（勾选 `write_repository`）
-2. 在本机执行：
+https://github.com/SunZune/schedule-app-pure
 
 ```bash
 cd e:\schedule-app-pure
-git remote set-url origin https://gitcode.com/Wishings/schedule-app-pure.git
+git remote set-url origin https://github.com/SunZune/schedule-app-pure.git
 git push -u origin main
-```
-
-提示输入密码时，**粘贴令牌**（不是登录密码）。
-
-首次关联仓库：
-
-```bash
-git remote add origin https://gitcode.com/Wishings/schedule-app-pure.git
 ```
 
 ## 部署到 Vercel
 
-- Import 该 GitCode 仓库
+- Import 该 [GitHub 仓库](https://github.com/SunZune/schedule-app-pure)
 - Framework Preset: **Vite**
 - Build Command: `npm run build`
 - Output Directory: `dist`
