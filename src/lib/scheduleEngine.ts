@@ -49,21 +49,49 @@ function matchSummaryField(label: string): keyof SummaryValues | null {
 }
 
 function lastUsedColumn(sheet: ExcelJS.Worksheet, aroundRow?: number): number {
+  let max = 0
   const dim = sheet.dimensions
-  if (dim?.right && dim.right > 1) return dim.right
-  let max = sheet.columnCount || 0
-  const rows = aroundRow
-    ? [sheet.getRow(aroundRow)]
-    : []
-  for (let ri = 1; ri <= Math.min(sheet.rowCount || 0, 20); ri++) {
-    rows.push(sheet.getRow(ri))
-  }
-  for (const row of rows) {
-    row.eachCell({ includeEmpty: false }, (_, col) => {
+  if (dim?.right && dim.right > 1) max = dim.right
+  max = Math.max(max, sheet.columnCount || 0)
+
+  const rowsToScan = new Set<number>([2, 1, 3, 4, 5])
+  if (aroundRow) rowsToScan.add(aroundRow)
+  for (let ri = 1; ri <= Math.min(sheet.rowCount || 0, 15); ri++) rowsToScan.add(ri)
+
+  for (const ri of rowsToScan) {
+    if (ri < 1 || ri > (sheet.rowCount || 0)) continue
+    sheet.getRow(ri).eachCell({ includeEmpty: false }, (_, col) => {
       max = Math.max(max, col)
     })
   }
-  return Math.max(max, 30)
+  // 汇总列常在 31 日之后（约 34–37 列），不能仅信 dimensions
+  return Math.max(max, 40)
+}
+
+/** 表头漏扫时，按「应出勤 +3 = 累计余」的常见列布局补全 */
+function ensureSummaryCols(
+  sheet: ExcelJS.Worksheet,
+  nameRow: number,
+  cols: Partial<Record<keyof SummaryValues, number>>,
+): void {
+  const base = cols.should_work
+  if (!base) return
+
+  const layout: [keyof SummaryValues, number][] = [
+    ['actual_work', base + 1],
+    ['month_balance', base + 2],
+    ['total_balance', base + 3],
+  ]
+
+  for (const [key, ci] of layout) {
+    if (cols[key]) continue
+    const header = cellStr(sheet.getRow(2).getCell(ci))
+    const fromHeader = matchSummaryField(header)
+    const fromData = parseBalanceText(cellStr(sheet.getRow(nameRow).getCell(ci)))
+    if (fromHeader === key || fromData !== null) {
+      cols[key] = ci
+    }
+  }
 }
 
 const WEEKDAY_MAP: Record<string, number> = {
@@ -296,6 +324,7 @@ function calcSheet(
   const { row: rowIdx, col: nameCol } = pos
   const { dateRowMap, weekdayMap } = findDateAndWeekdayRows(sheet, rowIdx)
   const summaryCols = findSummaryCols(sheet, rowIdx)
+  ensureSummaryCols(sheet, rowIdx, summaryCols)
   const summaryColsList = Object.values(summaryCols).filter((c): c is number => c != null)
   const summaryMinCol = summaryColsList.length ? Math.min(...summaryColsList) : sheet.columnCount + 1
   const minDataCol = nameCol + 1

@@ -109,12 +109,12 @@ function SheetDetail({ sheet }: { sheet: SheetResult }) {
                   </>
                 )}
                 <span className="lbl">实</span><span className="val accent2">{sheet.actual_work}h</span>
-                {sheet.month_balance !== null && (
+                {(sheet.has_summary || sheet.month_balance !== null) && (
                   <span className={`balance-tag ${balanceClass(sheet.month_balance)}`}>
                     本月余 {fmt(sheet.month_balance)}
                   </span>
                 )}
-                {sheet.total_balance !== null && (
+                {(sheet.has_summary || sheet.total_balance !== null) && (
                   <span className={`balance-tag total-balance ${balanceClass(sheet.total_balance)}`}>
                     累计余 {fmt(sheet.total_balance)}
                   </span>
@@ -140,7 +140,7 @@ function SheetDetail({ sheet }: { sheet: SheetResult }) {
                 <span className="summary-label">实际出勤</span>
                 <span className="summary-value accent2">{sheet.actual_work}h</span>
               </div>
-              {sheet.month_balance !== null && (
+              {(sheet.has_summary || sheet.month_balance !== null) && (
                 <div className="summary-item">
                   <span className="summary-label">本月余</span>
                   <span className={`summary-value ${balanceClass(sheet.month_balance)}`}>
@@ -148,7 +148,7 @@ function SheetDetail({ sheet }: { sheet: SheetResult }) {
                   </span>
                 </div>
               )}
-              {sheet.total_balance !== null && (
+              {(sheet.has_summary || sheet.total_balance !== null) && (
                 <div className="summary-item highlight-total">
                   <span className="summary-label">累计余</span>
                   <span className={`summary-value ${balanceClass(sheet.total_balance)}`}>
