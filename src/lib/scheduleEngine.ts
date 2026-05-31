@@ -112,7 +112,7 @@ function findNameRow(sheet: ExcelJS.Worksheet, name: string): { row: number; col
       }
     }
   }
-  return found
+  return null
 }
 
 function findDateAndWeekdayRows(sheet: ExcelJS.Worksheet, nameRow: number) {
@@ -194,7 +194,7 @@ function findSummaryCols(sheet: ExcelJS.Worksheet, headerRow: number): Partial<R
     }
     if (Object.keys(found).length >= 2) return found
   }
-  return result
+  return {}
 }
 
 function readSummaryValues(
