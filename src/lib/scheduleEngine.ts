@@ -232,12 +232,7 @@ function findDateAndWeekdayRows(sheet: ExcelJS.Worksheet, nameRow: number) {
       const val = cellStr(cell)
       const n = parseInt(val, 10)
       if (!Number.isNaN(n) && n >= 1 && n <= 31) dScore += 1
-      for (const kw of Object.keys(WEEKDAY_MAP)) {
-        if (val.includes(kw)) {
-          wScore += 1
-          break
-        }
-      }
+      if (parseWeekdayLabel(val) != null) wScore += 1
     }
     if (dScore > dateScore) {
       dateScore = dScore
@@ -251,7 +246,8 @@ function findDateAndWeekdayRows(sheet: ExcelJS.Worksheet, nameRow: number) {
 
   if (dateBest != null) {
     const row = sheet.getRow(dateBest)
-    for (let ci = 1; ci <= sheet.columnCount; ci++) {
+    const maxC = lastUsedColumn(sheet, nameRow)
+    for (let ci = 1; ci <= maxC; ci++) {
       const cell = row.getCell(ci)
       if (cell.value == null) continue
       const n = parseInt(cellStr(cell), 10)
@@ -259,22 +255,59 @@ function findDateAndWeekdayRows(sheet: ExcelJS.Worksheet, nameRow: number) {
     }
   }
 
-  if (weekBest != null && weekBest !== dateBest) {
-    const row = sheet.getRow(weekBest)
-    for (let ci = 1; ci <= sheet.columnCount; ci++) {
-      const cell = row.getCell(ci)
-      if (cell.value == null) continue
-      const val = cellStr(cell)
-      for (const [kw, num] of Object.entries(WEEKDAY_MAP)) {
-        if (val.includes(kw)) {
-          weekdayMap[ci] = num
-          break
-        }
+  if (weekBest === dateBest) {
+    for (const delta of [-1, 1]) {
+      const ri = (dateBest ?? 0) + delta
+      if (ri < 1 || ri > nameRow) continue
+      let score = 0
+      const maxC = lastUsedColumn(sheet, nameRow)
+      for (let ci = 1; ci <= maxC; ci++) {
+        if (parseWeekdayLabel(cellStr(sheet.getRow(ri).getCell(ci))) != null) score++
+      }
+      if (score >= 7) {
+        weekBest = ri
+        break
       }
     }
   }
 
+  if (weekBest != null && weekBest !== dateBest) {
+    const row = sheet.getRow(weekBest)
+    const maxC = lastUsedColumn(sheet, nameRow)
+    for (let ci = 1; ci <= maxC; ci++) {
+      const cell = row.getCell(ci)
+      if (cell.value == null) continue
+      const wd = parseWeekdayLabel(cellStr(cell))
+      if (wd != null) weekdayMap[ci] = wd
+    }
+  }
+
   return { dateRowMap, weekdayMap }
+}
+
+/** 解析星期行单元格（单字 一二三四五六日，避免 includes 误匹配） */
+function parseWeekdayLabel(val: string): number | null {
+  const t = val.trim()
+  if (!t) return null
+
+  const zh = t.match(/^周?([一二三四五六日天])$/)
+  if (zh && WEEKDAY_MAP[zh[1]] != null) return WEEKDAY_MAP[zh[1]]
+
+  if (t.length === 1 && WEEKDAY_MAP[t] != null) return WEEKDAY_MAP[t]
+
+  const enMap: Record<string, number> = {
+    mon: 1,
+    tue: 2,
+    wed: 3,
+    thu: 4,
+    fri: 5,
+    sat: 6,
+    sun: 7,
+  }
+  const k = t.toLowerCase().slice(0, 3)
+  if (enMap[k] != null) return enMap[k]
+
+  return null
 }
 
 function findSummaryCols(sheet: ExcelJS.Worksheet, headerRow: number): Partial<Record<keyof SummaryValues, number>> {
